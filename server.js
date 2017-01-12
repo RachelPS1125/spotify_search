@@ -19,7 +19,7 @@ var getFromApi = function(endpoint, args){
     });
   return emitter;
 };
-
+//https://api.spotify.com/v1/search?q=john&limit=1&type=artist
 app.get('/search/:name', function(req, res){
   var searchReq = getFromApi('search', {
     q: req.params.name,
@@ -32,11 +32,29 @@ app.get('/search/:name', function(req, res){
     var relatedArtists = getFromApi('artists/' + artist.id + '/related-artists');
     relatedArtists.on('end', function(related){
       artist.related = related.artists;
-      res.json(artist);
+      var pendingRequests = artist.related.length;
+      artist.related.forEach(function(item){
+        var topTracks = getFromApi('artists/' + item.id + '/top-tracks', {country:'us'});
+        topTracks.on('end', function(response){
+          item.tracks = response.tracks;
+          pendingRequests--;
+          if (pendingRequests === 0){
+            res.json(artist);
+          }
+        });
+        topTracks.on('error', function(code){
+          pendingRequests--;
+          item.tracks = [];
+          if(pendingRequests === 0){
+            res.json(artist);
+          }
+        });
+      });
     });
     relatedArtists.on('error', function(code){
-      res.sendStatus(code)
-    })
+      res.sendStatus(code);
+    });
+    
   });
   
   searchReq.on('error', function(code){
